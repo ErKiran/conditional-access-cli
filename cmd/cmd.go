@@ -40,6 +40,7 @@ func init() {
 	rootCmd.AddCommand(entraCmd)
 	rootCmd.AddCommand(graphCmd)
 	rootCmd.AddCommand(whatIfCmd)
+	rootCmd.AddCommand(batchCmd)
 }
 
 func Execute() {

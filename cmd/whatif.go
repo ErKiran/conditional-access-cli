@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"ca-cli/graph"
+	"ca-cli/helper"
 
 	"github.com/spf13/cobra"
 )
@@ -41,12 +42,13 @@ var whatIfCmd = &cobra.Command{
 		client, _ := cmd.Flags().GetString("client")
 		ip, _ := cmd.Flags().GetString("ip")
 		country, _ := cmd.Flags().GetString("country")
+		policyFilter, _ := cmd.Flags().GetString("policy")
 
 		if strings.TrimSpace(user) == "" || strings.TrimSpace(app) == "" {
 			log.Fatal("Both --user and --app are required")
 		}
 
-		gh, err := getGraphHelper()
+		gh, err := helper.GetGraphHelper()
 		if err != nil {
 			log.Fatalf("Error initializing Graph: %v", err)
 		}
@@ -57,7 +59,10 @@ var whatIfCmd = &cobra.Command{
 
 		resp, err := gh.WhatIfEvaluateOfficial(input)
 		if err == nil {
-			renderOfficialWhatIf(resp, user, app, client, platform, country)
+			if policyFilter != "" {
+				resp = filterResponseByPolicy(resp, policyFilter)
+			}
+			renderOfficialWhatIf(resp, user, app, client, platform, country, policyFilter)
 			return
 		}
 		fmt.Printf("Official What-If failed, falling back to local evaluator: %v\n", err)
@@ -65,10 +70,48 @@ var whatIfCmd = &cobra.Command{
 	},
 }
 
-func renderOfficialWhatIf(resp map[string]any, inputUser, inputApp, inputClient, inputPlatform, inputCountry string) {
+func filterResponseByPolicy(resp map[string]any, policyNameOrID string) map[string]any {
+	val, ok := resp["value"].([]any)
+	if !ok {
+		return resp
+	}
+
+	filtered := []any{}
+	policyLower := strings.ToLower(strings.TrimSpace(policyNameOrID))
+
+	for _, v := range val {
+		m, ok := v.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		displayName := getStringAny(m, "displayName", "")
+		policyID := getStringAny(m, "id", "")
+
+		if strings.Contains(strings.ToLower(displayName), policyLower) ||
+			strings.Contains(strings.ToLower(policyID), policyLower) {
+			filtered = append(filtered, v)
+		}
+	}
+
+	resp["value"] = filtered
+	return resp
+}
+
+func renderOfficialWhatIf(resp map[string]any, inputUser, inputApp, inputClient, inputPlatform, inputCountry, policyFilter string) {
 	items := parseOfficialItems(resp)
 
-	fmt.Printf("\n%sSimulation result%s for %s (official Graph What-If)\n\n", colorCyan, colorReset, inputUser)
+	if len(items) == 0 {
+		fmt.Printf("\nNo policies matched filter: %s\n", policyFilter)
+		return
+	}
+
+	headerText := fmt.Sprintf("Simulation result for %s (official Graph What-If)", inputUser)
+	if policyFilter != "" {
+		headerText += fmt.Sprintf(" [Policy: %s]", policyFilter)
+	}
+
+	fmt.Printf("\n%s%s%s\n\n", colorCyan, headerText, colorReset)
 	fmt.Printf("%sAPPLIED POLICIES%s\n", colorCyan, colorReset)
 
 	finalReq := map[string]struct{}{}
@@ -266,6 +309,7 @@ func init() {
 	whatIfCmd.Flags().String("client", "", "Client app type (browser, mobileAppsAndDesktopClients, etc.)")
 	whatIfCmd.Flags().String("ip", "", "IP address")
 	whatIfCmd.Flags().String("country", "", "Country code (e.g., US)")
+	whatIfCmd.Flags().String("policy", "", "Filter to specific policy by name or ID (e.g., 'Require MFA' or policy-guid)")
 	whatIfCmd.Flags().Bool("raw", false, "Print raw official Graph response JSON")
 	whatIfCmd.Flags().Bool("local", false, "Force local evaluator (skip official Graph What-If API)")
 }

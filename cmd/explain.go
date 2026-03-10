@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"ca-cli/helper"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -18,7 +19,7 @@ var explainPolicyCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		policyIdentifier := args[0]
 
-		_, err := getGraphHelper()
+		_, err := helper.GetGraphHelper()
 
 		if err != nil {
 			log.Fatalf("Error initializing Graph for user auth: %v", err)
@@ -54,7 +55,7 @@ func init() {
 }
 
 func findPolicy(identifier string) (models.ConditionalAccessPolicyable, error) {
-	graphHelper, err := getGraphHelper()
+	graphHelper, err := helper.GetGraphHelper()
 
 	if err != nil {
 		log.Fatalf("Error initializing Graph for user auth: %v", err)

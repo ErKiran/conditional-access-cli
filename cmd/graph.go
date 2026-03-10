@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"ca-cli/helper"
 	"fmt"
 	"log"
 	"sort"
@@ -14,7 +15,7 @@ var graphCmd = &cobra.Command{
 	Use:   "graph",
 	Short: "Visualize Conditional Access policy relationships",
 	Run: func(cmd *cobra.Command, args []string) {
-		gh, err := getGraphHelper()
+		gh, err := helper.GetGraphHelper()
 		if err != nil {
 			log.Fatalf("Error initializing Graph: %v", err)
 		}
