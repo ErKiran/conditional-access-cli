@@ -36,7 +36,10 @@ func init() {
 	entraCmd.AddCommand(authCmd)
 
 	rootCmd.AddCommand(listPolicyCmd)
+	rootCmd.AddCommand(explainPolicyCmd)
 	rootCmd.AddCommand(entraCmd)
+	rootCmd.AddCommand(graphCmd)
+	rootCmd.AddCommand(whatIfCmd)
 }
 
 func Execute() {

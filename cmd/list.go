@@ -1,11 +1,11 @@
 package cmd
 
 import (
-	"ca-cli/graph"
 	"fmt"
 	"log"
 	"strings"
 
+	"github.com/microsoftgraph/msgraph-sdk-go/models"
 	"github.com/spf13/cobra"
 )
 
@@ -13,9 +13,8 @@ var listPolicyCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List Conditional Access policies",
 	Run: func(cmd *cobra.Command, args []string) {
-		graphHelper := graph.NewGraphHelper()
+		graphHelper, err := getGraphHelper()
 
-		err := graphHelper.InitializeGraphForUserAuth()
 		if err != nil {
 			log.Fatalf("Error initializing Graph for user auth: %v", err)
 		}
@@ -26,25 +25,98 @@ var listPolicyCmd = &cobra.Command{
 		}
 
 		fmt.Printf("\n%s✓%s Found %d Conditional Access policies\n", colorGreen, colorReset, len(policies))
+		if len(policies) == 0 {
+			fmt.Println("No policies found.")
+			return
+		}
+
+		// Calculate column widths based on content
+		colWidths := calculateColumnWidths(policies)
+
 		// Print table header
-		fmt.Printf("%-40s %-12s %-20s %-20s %-20s %-20s %-20s\n",
-			"POLICY NAME", "STATE", "INCLUDED USERS", "EXCLUDED USERS", "TARGET APPS", "GRANT CONTROLS", "SESSION CONTROLS")
-		fmt.Println(strings.Repeat("-", 152))
+		printRow(colWidths,
+			"POLICY NAME", "STATE", "INCLUDED USERS", "EXCLUDED USERS",
+			"TARGET APPS", "GRANT CONTROLS", "SESSION CONTROLS")
 
+		printSeparator(colWidths)
+
+		// Print each policy
 		for _, p := range policies {
-			name := truncate(getString(p.GetDisplayName()), 40)
-			state := truncate(getState(p.GetState()), 12)
-			includedUsers := truncate(getIncludedUsers(p), 20)
-			excludedUsers := truncate(getExcludedUsers(p), 20)
-			targetApps := truncate(getTargetApps(p), 20)
-			grantControls := truncate(getGrantControls(p), 20)
-			sessionControls := truncate(getSessionControls(p), 20)
+			name := getString(p.GetDisplayName())
+			state := getStateStr(p.GetState())
+			includedUsers := getIncludedUsers(p)
+			excludedUsers := getExcludedUsers(p)
+			targetApps := getTargetApps(p)
+			grantControls := getGrantControls(p)
+			sessionControls := getSessionControls(p)
 
-			fmt.Printf("%-40s %-12s %-20s %-20s %-20s %-20s %-20s\n",
-				name, state, includedUsers, excludedUsers, targetApps, grantControls, sessionControls)
+			printRow(colWidths, name, state, includedUsers, excludedUsers,
+				targetApps, grantControls, sessionControls)
 		}
 		fmt.Println()
 	},
+}
+
+func calculateColumnWidths(policies []models.ConditionalAccessPolicyable) []int {
+	// Start with minimum widths (header lengths)
+	widths := []int{12, 8, 14, 14, 11, 14, 16} // Min widths for headers
+	headers := []string{"POLICY NAME", "STATE", "INCLUDED USERS", "EXCLUDED USERS",
+		"TARGET APPS", "GRANT CONTROLS", "SESSION CONTROLS"}
+
+	// Set initial widths to header lengths
+	for i, h := range headers {
+		if len(h) > widths[i] {
+			widths[i] = len(h)
+		}
+	}
+
+	// Check each policy and expand columns as needed
+	for _, p := range policies {
+		values := []string{
+			getString(p.GetDisplayName()),
+			getStateStr(p.GetState()),
+			getIncludedUsers(p),
+			getExcludedUsers(p),
+			getTargetApps(p),
+			getGrantControls(p),
+			getSessionControls(p),
+		}
+
+		for i, v := range values {
+			if len(v) > widths[i] {
+				// Cap maximum width per column to keep table readable
+				maxWidth := 50
+				if i == 0 { // Policy name can be longer
+					maxWidth = 60
+				}
+				if len(v) > maxWidth {
+					widths[i] = maxWidth
+				} else {
+					widths[i] = len(v)
+				}
+			}
+		}
+	}
+
+	return widths
+}
+
+func printRow(widths []int, cols ...string) {
+	for i, col := range cols {
+		if len(col) > widths[i] {
+			col = col[:widths[i]-3] + "..."
+		}
+		fmt.Printf("%-*s  ", widths[i], col)
+	}
+	fmt.Println()
+}
+
+func printSeparator(widths []int) {
+	total := 0
+	for _, w := range widths {
+		total += w + 2 // +2 for spacing
+	}
+	fmt.Println(strings.Repeat("-", total))
 }
 
 func getString(s *string) string {
@@ -54,38 +126,126 @@ func getString(s *string) string {
 	return *s
 }
 
-func getState(state interface{}) string {
+func getStateStr(state interface{}) string {
 	if state == nil {
 		return "-"
 	}
 	return fmt.Sprintf("%v", state)
 }
 
-func getIncludedUsers(p interface{}) string {
-	// Type assertion would go here based on your model
-	// For now, return placeholder
-	return "All/Groups"
-}
-
-func getExcludedUsers(p interface{}) string {
-	return "None"
-}
-
-func getTargetApps(p interface{}) string {
-	return "All apps"
-}
-
-func getGrantControls(p interface{}) string {
-	return "MFA required"
-}
-
-func getSessionControls(p interface{}) string {
-	return "None"
-}
-
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
+func getIncludedUsers(p models.ConditionalAccessPolicyable) string {
+	conditions := p.GetConditions()
+	if conditions == nil {
+		return "-"
 	}
-	return s[:maxLen-3] + "..."
+	users := conditions.GetUsers()
+	if users == nil {
+		return "-"
+	}
+
+	includeUsers := users.GetIncludeUsers()
+	if includeUsers == nil || len(includeUsers) == 0 {
+		return "None"
+	}
+
+	if contains(includeUsers, "All") {
+		return "All users"
+	}
+
+	return fmt.Sprintf("%d users/groups", len(includeUsers))
+}
+
+func getExcludedUsers(p models.ConditionalAccessPolicyable) string {
+	conditions := p.GetConditions()
+	if conditions == nil {
+		return "-"
+	}
+	users := conditions.GetUsers()
+	if users == nil {
+		return "-"
+	}
+
+	excludeUsers := users.GetExcludeUsers()
+	if excludeUsers == nil || len(excludeUsers) == 0 {
+		return "None"
+	}
+
+	return fmt.Sprintf("%d users/groups", len(excludeUsers))
+}
+
+func getTargetApps(p models.ConditionalAccessPolicyable) string {
+	conditions := p.GetConditions()
+	if conditions == nil {
+		return "-"
+	}
+	apps := conditions.GetApplications()
+	if apps == nil {
+		return "-"
+	}
+
+	includeApps := apps.GetIncludeApplications()
+	if includeApps == nil || len(includeApps) == 0 {
+		return "None"
+	}
+
+	if contains(includeApps, "All") {
+		return "All apps"
+	}
+
+	return fmt.Sprintf("%d apps", len(includeApps))
+}
+
+func getGrantControls(p models.ConditionalAccessPolicyable) string {
+	grant := p.GetGrantControls()
+	if grant == nil {
+		return "-"
+	}
+
+	controls := grant.GetBuiltInControls()
+	if controls == nil || len(controls) == 0 {
+		return "None"
+	}
+
+	var names []string
+	for _, c := range controls {
+		names = append(names, fmt.Sprintf("%v", c))
+	}
+
+	return strings.Join(names, ", ")
+}
+
+func getSessionControls(p models.ConditionalAccessPolicyable) string {
+	session := p.GetSessionControls()
+	if session == nil {
+		return "None"
+	}
+
+	var controls []string
+	if session.GetApplicationEnforcedRestrictions() != nil {
+		controls = append(controls, "App restrictions")
+	}
+	if session.GetCloudAppSecurity() != nil {
+		controls = append(controls, "Cloud App Security")
+	}
+	if session.GetSignInFrequency() != nil {
+		controls = append(controls, "Sign-in frequency")
+	}
+	if session.GetPersistentBrowser() != nil {
+		controls = append(controls, "Persistent browser")
+	}
+
+	if len(controls) == 0 {
+		return "None"
+	}
+
+	return strings.Join(controls, ", ")
+}
+
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
