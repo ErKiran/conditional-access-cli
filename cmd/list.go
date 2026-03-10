@@ -14,13 +14,18 @@ var listPolicyCmd = &cobra.Command{
 	Short: "List Conditional Access policies",
 	Run: func(cmd *cobra.Command, args []string) {
 		graphHelper := graph.NewGraphHelper()
+
+		err := graphHelper.InitializeGraphForUserAuth()
+		if err != nil {
+			log.Fatalf("Error initializing Graph for user auth: %v", err)
+		}
+
 		policies, err := graphHelper.ListCAPolicy()
 		if err != nil {
 			log.Fatalf("Error listing Conditional Access policies: %v", err)
 		}
 
-		fmt.Printf("\n%s✓%s Found %d Conditional Access policies\n\n", colorGreen, colorReset, len(policies))
-
+		fmt.Printf("\n%s✓%s Found %d Conditional Access policies\n", colorGreen, colorReset, len(policies))
 		// Print table header
 		fmt.Printf("%-40s %-12s %-20s %-20s %-20s %-20s %-20s\n",
 			"POLICY NAME", "STATE", "INCLUDED USERS", "EXCLUDED USERS", "TARGET APPS", "GRANT CONTROLS", "SESSION CONTROLS")
@@ -28,7 +33,7 @@ var listPolicyCmd = &cobra.Command{
 
 		for _, p := range policies {
 			name := truncate(getString(p.GetDisplayName()), 40)
-			state := truncate(getStateStr(p.GetState()), 12)
+			state := truncate(getState(p.GetState()), 12)
 			includedUsers := truncate(getIncludedUsers(p), 20)
 			excludedUsers := truncate(getExcludedUsers(p), 20)
 			targetApps := truncate(getTargetApps(p), 20)
@@ -49,7 +54,7 @@ func getString(s *string) string {
 	return *s
 }
 
-func getStateStr(state interface{}) string {
+func getState(state interface{}) string {
 	if state == nil {
 		return "-"
 	}
@@ -57,7 +62,8 @@ func getStateStr(state interface{}) string {
 }
 
 func getIncludedUsers(p interface{}) string {
-	// You'll need to implement based on p.GetConditions().GetUsers().GetIncludeUsers()
+	// Type assertion would go here based on your model
+	// For now, return placeholder
 	return "All/Groups"
 }
 
