@@ -2,3 +2,5 @@ credentials.env
 
 *.csv
 *.json
+
+ca

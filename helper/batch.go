@@ -3,6 +3,7 @@ package helper
 import (
 	"ca-cli/graph"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -67,14 +68,16 @@ func (be *BatchExecutor) Execute(scenarios []BatchScenario) ([]ScenarioResult, *
 func (be *BatchExecutor) evaluateScenario(s BatchScenario) ScenarioResult {
 
 	result := ScenarioResult{
-		ScenarioID:  s.ID,
-		User:        s.User,
-		App:         s.App,
-		Platform:    s.Platform,
-		Client:      s.Client,
-		Country:     s.Country,
-		IP:          s.IP,
-		ProcessedAt: time.Now().Format(time.RFC3339),
+		ScenarioID:         s.ID,
+		User:               s.User,
+		App:                s.App,
+		Platform:           s.Platform,
+		Client:             s.Client,
+		Country:            s.Country,
+		IP:                 s.IP,
+		ProcessedAt:        time.Now().Format(time.RFC3339),
+		AppliedPolicies:    []PolicyMatch{}, // avoid null in JSON
+		NotAppliedPolicies: []PolicyMatch{}, // avoid null in JSON
 	}
 
 	userID, err := be.gh.ResolveUserID(s.User)
@@ -143,9 +146,10 @@ func (be *BatchExecutor) evaluateScenario(s BatchScenario) ScenarioResult {
 	} else {
 		ctrls := make([]string, 0, len(finalReqs))
 		for c := range finalReqs {
-			ctrls = append(ctrls, c)
+			ctrls = append(ctrls, strings.ToLower(strings.TrimSpace(c)))
 		}
-		result.FinalEffect = fmt.Sprintf("requires_%s", ctrls[0]) // simplified
+		sort.Strings(ctrls) // deterministic
+		result.FinalEffect = "requires_" + strings.Join(ctrls, "_and_")
 	}
 
 	return result
@@ -194,21 +198,19 @@ func summarizeResults(results []ScenarioResult, duration time.Duration) *BatchSu
 
 		summary.SuccessfulEvals++
 
-		switch r.FinalEffect {
-		case "access_allowed":
+		effect := strings.ToLower(strings.TrimSpace(r.FinalEffect))
+		switch {
+		case effect == "access_allowed":
 			summary.AccessAllowed++
-		case "blocked":
+		case effect == "blocked":
 			summary.Blocked++
-		default:
-			if contains(r.FinalEffect, "mfa") {
-				summary.MFARequired++
-			}
+		case strings.HasPrefix(effect, "requires_") && strings.Contains(effect, "mfa"):
+			summary.MFARequired++
 		}
 
 		for _, p := range r.AppliedPolicies {
 			summary.TopPolicies[p.PolicyName]++
 		}
-
 		for _, p := range r.NotAppliedPolicies {
 			summary.TopNonMatchReasons[p.Reason]++
 		}

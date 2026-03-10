@@ -53,8 +53,13 @@ var whatIfCmd = &cobra.Command{
 			log.Fatalf("Error initializing Graph: %v", err)
 		}
 
+		userID, err := gh.ResolveUserID(user)
+		if err != nil {
+			log.Fatal("unable to find the user id", err)
+		}
+
 		input := graph.WhatIfInput{
-			User: user, App: app, Platform: platform, Client: client, IP: ip, Country: country,
+			User: userID, App: app, Platform: platform, Client: client, IP: ip, Country: country,
 		}
 
 		resp, err := gh.WhatIfEvaluateOfficial(input)
