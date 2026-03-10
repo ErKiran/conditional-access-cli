@@ -109,8 +109,8 @@ TC-003,charlie@contoso.com,salesforce,android,mobile,UK,52.212.1.44,
 
 1. **Clone repository:**
 ```bash
-git clone https://github.com/yourusername/ca-cli.git
-cd ca-cli
+git clone https://github.com/ErKiran/conditional-access-cli.git
+cd conditional-access-cli
 ```
 
 2. **Create app registration in Azure:**
@@ -121,7 +121,7 @@ cd ca-cli
 
 3. **Configure credentials:**
 ```bash
-cp credentials.env.example credentials.env
+cp cred.env credentials.env
 ```
 
 Edit `credentials.env`:
@@ -176,26 +176,6 @@ diff baseline-before.json baseline.json
 ---
 
 
-## Architecture
-
-```
-ca-cli/
-├── cmd/              # Cobra commands
-│   ├── list_policy.go
-│   ├── explain_policy.go
-│   ├── whatif.go
-│   ├── batch.go
-│   └── signin_explain.go
-├── graph/            # Microsoft Graph SDK wrappers
-│   ├── graphhelper.go
-│   ├── what-if.go
-│   ├── user.go
-│   ├── batch.go
-│   └── batch_executor.go
-├── helper/           # Utilities
-└── main.go
-```
-
 **Key design decisions:**
 - Uses official Graph What-If API (beta endpoint)
 - Concurrent worker pool for batch processing
@@ -248,13 +228,6 @@ Built with:
 
 ---
 
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/ca-cli/issues)
-- **Documentation**: [Wiki](https://github.com/yourusername/ca-cli/wiki)
-- **Blog**: [Your blog link]
-
----
 
 ## Author
 
