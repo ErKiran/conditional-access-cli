@@ -75,6 +75,7 @@ func (be *BatchExecutor) evaluateScenario(s BatchScenario) ScenarioResult {
 		Client:             s.Client,
 		Country:            s.Country,
 		IP:                 s.IP,
+		UserRisk:           s.UserRisk,
 		ProcessedAt:        time.Now().Format(time.RFC3339),
 		AppliedPolicies:    []PolicyMatch{}, // avoid null in JSON
 		NotAppliedPolicies: []PolicyMatch{}, // avoid null in JSON
@@ -93,6 +94,7 @@ func (be *BatchExecutor) evaluateScenario(s BatchScenario) ScenarioResult {
 		Client:   s.Client,
 		IP:       s.IP,
 		Country:  s.Country,
+		UserRisk: s.UserRisk,
 	}
 
 	resp, err := be.gh.WhatIfEvaluateOfficial(input)

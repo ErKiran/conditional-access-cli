@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
@@ -87,6 +89,7 @@ func printPolicyExplanation(policy models.ConditionalAccessPolicyable) {
 	fmt.Printf("\n%sPolicy:%s %s\n", colorCyan, colorReset, getString(policy.GetDisplayName()))
 	fmt.Printf("%sState:%s %s\n", colorCyan, colorReset, getStateStr(policy.GetState()))
 	fmt.Printf("%sPolicy ID:%s %s\n\n", colorCyan, colorReset, getString(policy.GetId()))
+	fmt.Printf("%sSummary:%s %s\n\n", colorCyan, colorReset, generateHumanExplanation(policy))
 
 	conditions := policy.GetConditions()
 	if conditions == nil {
@@ -95,7 +98,7 @@ func printPolicyExplanation(policy models.ConditionalAccessPolicyable) {
 	}
 
 	// Applies to section
-	fmt.Printf("%s=== Applies to ===%s\n\n", colorGreen, colorReset)
+	fmt.Printf("%s=== Who and What This Targets ===%s\n\n", colorGreen, colorReset)
 
 	users := conditions.GetUsers()
 	if users != nil {
@@ -109,6 +112,13 @@ func printPolicyExplanation(policy models.ConditionalAccessPolicyable) {
 		if len(apps.GetExcludeApplications()) > 0 {
 			printAppScope("Excluded resources", apps.GetExcludeApplications())
 		}
+
+		if actions := apps.GetIncludeUserActions(); len(actions) > 0 {
+			fmt.Printf("• %sUser actions:%s %s\n", colorCyan, colorReset, strings.Join(formatDetailedList(actions), ", "))
+		}
+		if authCtx := apps.GetIncludeAuthenticationContextClassReferences(); len(authCtx) > 0 {
+			fmt.Printf("• %sAuthentication contexts:%s %s\n", colorCyan, colorReset, strings.Join(formatDetailedList(authCtx), ", "))
+		}
 	}
 
 	clientAppTypes := conditions.GetClientAppTypes()
@@ -116,7 +126,7 @@ func printPolicyExplanation(policy models.ConditionalAccessPolicyable) {
 		fmt.Printf("• %sClient apps:%s ", colorCyan, colorReset)
 		var types []string
 		for _, t := range clientAppTypes {
-			types = append(types, fmt.Sprintf("%v", t))
+			types = append(types, humanizeClientType(fmt.Sprintf("%v", t)))
 		}
 		fmt.Printf("%s\n", strings.Join(types, ", "))
 	}
@@ -136,10 +146,19 @@ func printPolicyExplanation(policy models.ConditionalAccessPolicyable) {
 		fmt.Printf("• %sPlatforms:%s ", colorCyan, colorReset)
 		var plat []string
 		for _, p := range platforms.GetIncludePlatforms() {
-			plat = append(plat, fmt.Sprintf("%v", p))
+			plat = append(plat, humanizePlatform(fmt.Sprintf("%v", p)))
 		}
 		fmt.Printf("%s\n", strings.Join(plat, ", "))
+		if len(platforms.GetExcludePlatforms()) > 0 {
+			var excluded []string
+			for _, p := range platforms.GetExcludePlatforms() {
+				excluded = append(excluded, humanizePlatform(fmt.Sprintf("%v", p)))
+			}
+			fmt.Printf("• %sExcluded platforms:%s %s\n", colorCyan, colorReset, strings.Join(excluded, ", "))
+		}
 	}
+
+	printRiskSection(conditions)
 
 	// Access logic section
 	fmt.Printf("\n%s=== Access Logic ===%s\n\n", colorGreen, colorReset)
@@ -169,40 +188,33 @@ func printPolicyExplanation(policy models.ConditionalAccessPolicyable) {
 	}
 
 	// Meaning section
-	fmt.Printf("\n%s=== What This Means ===%s\n\n", colorGreen, colorReset)
-	fmt.Println(generateHumanExplanation(policy))
+	fmt.Printf("\n%s=== Plain-English Walkthrough ===%s\n\n", colorGreen, colorReset)
+	fmt.Println(generateReadableWalkthrough(policy))
 	fmt.Println()
 }
 
 func printUserScope(label string, users, groups, roles []string) {
-	items := []string{}
-
-	if contains(users, "All") {
-		items = append(items, "All users")
-	} else if len(users) > 0 {
-		if contains(users, "GuestsOrExternalUsers") {
-			items = append(items, "Guest/External users")
-		}
-		if len(users) > 1 || !contains(users, "GuestsOrExternalUsers") {
-			items = append(items, fmt.Sprintf("%d specific user(s)", len(users)))
-		}
+	if len(users) == 0 && len(groups) == 0 && len(roles) == 0 {
+		return
 	}
 
+	parts := []string{}
+
+	if len(users) > 0 {
+		parts = append(parts, "users="+strings.Join(formatDetailedList(users), ", "))
+	}
 	if len(groups) > 0 {
-		items = append(items, fmt.Sprintf("%d group(s)", len(groups)))
+		parts = append(parts, "groups="+strings.Join(formatDetailedList(groups), ", "))
 	}
-
 	if len(roles) > 0 {
 		roleNames := []string{}
 		for _, role := range roles {
-			roleNames = append(roleNames, translateRole(role))
+			roleNames = append(roleNames, translateRole(role)+" ("+role+")")
 		}
-		items = append(items, strings.Join(roleNames, ", "))
+		parts = append(parts, "roles="+strings.Join(roleNames, ", "))
 	}
 
-	if len(items) > 0 {
-		fmt.Printf("• %s%s:%s %s\n", colorCyan, label, colorReset, strings.Join(items, ", "))
-	}
+	fmt.Printf("• %s%s:%s %s\n", colorCyan, label, colorReset, strings.Join(parts, " | "))
 }
 
 func printAppScope(label string, apps []string) {
@@ -210,13 +222,7 @@ func printAppScope(label string, apps []string) {
 		return
 	}
 
-	if contains(apps, "All") {
-		fmt.Printf("• %s%s:%s All cloud apps\n", colorCyan, label, colorReset)
-	} else if contains(apps, "Office365") {
-		fmt.Printf("• %s%s:%s Office 365\n", colorCyan, label, colorReset)
-	} else {
-		fmt.Printf("• %s%s:%s %d application(s)\n", colorCyan, label, colorReset, len(apps))
-	}
+	fmt.Printf("• %s%s:%s %s\n", colorCyan, label, colorReset, strings.Join(formatDetailedList(apps), ", "))
 }
 
 func printLocationScope(label string, locations []string) {
@@ -224,13 +230,7 @@ func printLocationScope(label string, locations []string) {
 		return
 	}
 
-	if contains(locations, "All") {
-		fmt.Printf("• %s%s:%s All locations\n", colorCyan, label, colorReset)
-	} else if contains(locations, "AllTrusted") {
-		fmt.Printf("• %s%s:%s All trusted locations\n", colorCyan, label, colorReset)
-	} else {
-		fmt.Printf("• %s%s:%s %d location(s)\n", colorCyan, label, colorReset, len(locations))
-	}
+	fmt.Printf("• %s%s:%s %s\n", colorCyan, label, colorReset, strings.Join(formatDetailedList(locations), ", "))
 }
 
 func printSessionExplanation(session models.ConditionalAccessSessionControlsable) {
@@ -240,7 +240,7 @@ func printSessionExplanation(session models.ConditionalAccessSessionControlsable
 		controls = append(controls, "Application enforced restrictions")
 	}
 	if session.GetCloudAppSecurity() != nil {
-		controls = append(controls, "Cloud App Security monitoring")
+		controls = append(controls, "Cloud App Security session policy")
 	}
 	if session.GetSignInFrequency() != nil {
 		freq := session.GetSignInFrequency()
@@ -349,7 +349,200 @@ func generateHumanExplanation(policy models.ConditionalAccessPolicyable) string 
 		}
 	}
 
+	if who == "" {
+		who = "In-scope identities"
+	}
+	if what == "" {
+		what = "performing in-scope sign-ins"
+	}
+	if must == "" {
+		must = "meet this policy's configured requirements"
+	}
+
 	explanation := fmt.Sprintf("%s %s must %s unless excluded.", who, what, must)
 
 	return explanation
+}
+
+func generateReadableWalkthrough(policy models.ConditionalAccessPolicyable) string {
+	conditions := policy.GetConditions()
+	if conditions == nil {
+		return "This policy has no conditions, so it won’t evaluate meaningful targeting rules."
+	}
+
+	parts := []string{}
+
+	if users := conditions.GetUsers(); users != nil {
+		if len(users.GetIncludeUsers()) > 0 || len(users.GetIncludeGroups()) > 0 || len(users.GetIncludeRoles()) > 0 {
+			parts = append(parts, "It targets the user scope listed above.")
+		}
+		if len(users.GetExcludeUsers()) > 0 || len(users.GetExcludeGroups()) > 0 || len(users.GetExcludeRoles()) > 0 {
+			parts = append(parts, "Some users/groups/roles are explicitly excluded and bypass this policy.")
+		}
+	}
+
+	if apps := conditions.GetApplications(); apps != nil {
+		if len(apps.GetIncludeApplications()) > 0 {
+			parts = append(parts, "It applies only when accessing the listed cloud apps/resources.")
+		}
+		if len(apps.GetExcludeApplications()) > 0 {
+			parts = append(parts, "The excluded apps/resources are out of scope.")
+		}
+		if len(apps.GetIncludeUserActions()) > 0 {
+			parts = append(parts, "It is also scoped to specific user actions.")
+		}
+	}
+
+	if locations := conditions.GetLocations(); locations != nil {
+		if len(locations.GetIncludeLocations()) > 0 {
+			parts = append(parts, "Location conditions decide where sign-ins are in scope.")
+		}
+		if len(locations.GetExcludeLocations()) > 0 {
+			parts = append(parts, "Excluded locations are treated as exceptions.")
+		}
+	}
+
+	riskSignals := []string{}
+	if v := callStringSliceMethod(conditions, "GetUserRiskLevels"); len(v) > 0 {
+		riskSignals = append(riskSignals, "user risk")
+	}
+	if v := callStringSliceMethod(conditions, "GetSignInRiskLevels"); len(v) > 0 {
+		riskSignals = append(riskSignals, "sign-in risk")
+	}
+	if len(riskSignals) > 0 {
+		parts = append(parts, "Risk signals are part of evaluation ("+strings.Join(riskSignals, " and ")+").")
+	}
+
+	if grant := policy.GetGrantControls(); grant != nil && len(grant.GetBuiltInControls()) > 0 {
+		op := "all"
+		if grant.GetOperator() != nil && strings.EqualFold(*grant.GetOperator(), "or") {
+			op = "one"
+		}
+		parts = append(parts, fmt.Sprintf("When the policy matches, the user must satisfy %s listed grant control(s).", op))
+	}
+
+	if len(parts) == 0 {
+		return "This policy is enabled but has limited visible targeting details in the current response."
+	}
+
+	return strings.Join(parts, " ")
+}
+
+func printRiskSection(conditions models.ConditionalAccessConditionSetable) {
+	riskMap := map[string][]string{
+		"User risk":              callStringSliceMethod(conditions, "GetUserRiskLevels"),
+		"Sign-in risk":           callStringSliceMethod(conditions, "GetSignInRiskLevels"),
+		"Insider risk":           callStringSliceMethod(conditions, "GetInsiderRiskLevels"),
+		"Service principal risk": callStringSliceMethod(conditions, "GetServicePrincipalRiskLevels"),
+	}
+
+	keys := []string{"User risk", "Sign-in risk", "Insider risk", "Service principal risk"}
+	printed := false
+	for _, k := range keys {
+		vals := riskMap[k]
+		if len(vals) == 0 {
+			continue
+		}
+		printed = true
+		fmt.Printf("• %s%s:%s %s\n", colorCyan, k, colorReset, strings.Join(formatDetailedList(vals), ", "))
+	}
+
+	if printed {
+		fmt.Printf("• %sRisk note:%s these values are evaluated as policy conditions, not real-time detections by this CLI.\n", colorCyan, colorReset)
+	}
+}
+
+func callStringSliceMethod(target any, methodName string) []string {
+	rv := reflect.ValueOf(target)
+	if !rv.IsValid() {
+		return nil
+	}
+
+	m := rv.MethodByName(methodName)
+	if !m.IsValid() {
+		return nil
+	}
+
+	out := m.Call(nil)
+	if len(out) == 0 {
+		return nil
+	}
+
+	res := out[0]
+	if !res.IsValid() || res.Kind() != reflect.Slice || res.IsNil() {
+		return nil
+	}
+
+	items := make([]string, 0, res.Len())
+	for i := 0; i < res.Len(); i++ {
+		items = append(items, fmt.Sprintf("%v", res.Index(i).Interface()))
+	}
+	return items
+}
+
+func formatDetailedList(values []string) []string {
+	if len(values) == 0 {
+		return values
+	}
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		out = append(out, humanizeSpecialValue(v))
+	}
+	sort.Strings(out)
+	return out
+}
+
+func humanizeSpecialValue(v string) string {
+	s := strings.TrimSpace(v)
+	if s == "" {
+		return s
+	}
+
+	sLower := strings.ToLower(s)
+	switch sLower {
+	case "all":
+		return "All"
+	case "none":
+		return "None"
+	case "alltrusted":
+		return "All trusted locations"
+	case "office365":
+		return "Office 365"
+	case "guestsorexternalusers":
+		return "Guests or external users"
+	default:
+		return s
+	}
+}
+
+func humanizePlatform(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "windows":
+		return "Windows"
+	case "macos", "mac":
+		return "macOS"
+	case "ios":
+		return "iOS"
+	case "android":
+		return "Android"
+	case "linux":
+		return "Linux"
+	default:
+		return v
+	}
+}
+
+func humanizeClientType(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "browser":
+		return "Browser"
+	case "mobileappsanddesktopclients":
+		return "Mobile apps and desktop clients"
+	case "exchangeactivesync":
+		return "Exchange ActiveSync"
+	case "other":
+		return "Other legacy clients"
+	default:
+		return v
+	}
 }

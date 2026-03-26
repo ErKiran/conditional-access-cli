@@ -19,6 +19,7 @@ type WhatIfInput struct {
 	Platform string
 	IP       string
 	Country  string
+	UserRisk string
 }
 
 // NOTE: Graph What-If is strict about payload shape/values.
@@ -38,6 +39,17 @@ func (g *GraphHelper) WhatIfEvaluateOfficial(in WhatIfInput) (map[string]any, er
 	userID := strings.TrimSpace(in.User) // Prefer object ID; UPN may fail in some tenants
 	appID := normalizeAppForWhatIf(in.App)
 
+	signInConditions := map[string]any{
+		"clientAppType":  normalizeClientApp(in.Client),
+		"devicePlatform": normalizePlatform(in.Platform),
+		"ipAddress":      strings.TrimSpace(in.IP),
+		"country":        strings.ToUpper(strings.TrimSpace(in.Country)),
+	}
+
+	if risk := normalizeRiskLevel(in.UserRisk); risk != "" {
+		signInConditions["userRiskLevel"] = risk
+	}
+
 	payload := map[string]any{
 		"signInIdentity": map[string]any{
 			"@odata.type": "#microsoft.graph.userSignIn",
@@ -47,12 +59,7 @@ func (g *GraphHelper) WhatIfEvaluateOfficial(in WhatIfInput) (map[string]any, er
 			"@odata.type":         "#microsoft.graph.applicationContext",
 			"includeApplications": []string{appID},
 		},
-		"signInConditions": map[string]any{
-			"clientAppType":  normalizeClientApp(in.Client),
-			"devicePlatform": normalizePlatform(in.Platform),
-			"ipAddress":      strings.TrimSpace(in.IP),
-			"country":        strings.ToUpper(strings.TrimSpace(in.Country)),
-		},
+		"signInConditions": signInConditions,
 	}
 
 	body, err := json.Marshal(payload)
@@ -133,5 +140,14 @@ func normalizePlatform(v string) string {
 		return "linux"
 	default:
 		return "windows"
+	}
+}
+
+func normalizeRiskLevel(v string) string {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "none", "low", "medium", "high", "hidden":
+		return strings.ToLower(strings.TrimSpace(v))
+	default:
+		return ""
 	}
 }

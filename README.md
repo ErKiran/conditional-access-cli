@@ -48,6 +48,7 @@ Deep-dive into a single policy with detailed conditions and controls.
   --app office365 \
   --platform windows \
   --client browser \
+  --user-risk high \
   --country US \
   --ip 40.77.182.32
 
@@ -68,8 +69,9 @@ Simulate a sign-in scenario and see:
   --app office365 \
   --platform windows \
   --client browser \
+  --user-risk high \
   --country US \
-  --ip 40.77.182.32
+  --ip 40.77.182.32 \
   --policy "MFA-Pilot-Users"
 ```
 
@@ -84,10 +86,10 @@ Run bulk What-If evaluations for regression testing and policy validation.
 
 **Input CSV format:**
 ```csv
-scenario_id,user,app,platform,client,country,ip,policy
-TC-001,alice@contoso.com,office365,windows,browser,US,40.77.182.32,
-TC-002,bob@contoso.com,office365,ios,mobile,CA,52.12.10.1,MFA-Pilot
-TC-003,charlie@contoso.com,salesforce,android,mobile,UK,52.212.1.44,
+scenario_id,user,app,platform,client,country,ip,user_risk,policy
+TC-001,alice@contoso.com,office365,windows,browser,US,40.77.182.32,high,
+TC-002,bob@contoso.com,office365,ios,mobile,CA,52.12.10.1,low,MFA-Pilot
+TC-003,charlie@contoso.com,salesforce,android,mobile,UK,52.212.1.44,none,
 ```
 
 **Output includes:**

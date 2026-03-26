@@ -32,6 +32,7 @@ type BatchScenario struct {
 	Client   string `json:"client"`
 	Country  string `json:"country"`
 	IP       string `json:"ip"`
+	UserRisk string `json:"userRisk,omitempty"`
 	Policy   string `json:"policy,omitempty"` // Optional policy filter
 }
 
@@ -53,6 +54,7 @@ type ScenarioResult struct {
 	Client             string        `json:"client"`
 	Country            string        `json:"country"`
 	IP                 string        `json:"ip"`
+	UserRisk           string        `json:"userRisk,omitempty"`
 	FinalEffect        string        `json:"finalEffect"`
 	AppliedPolicies    []PolicyMatch `json:"appliedPolicies"`
 	NotAppliedPolicies []PolicyMatch `json:"notAppliedPolicies"`
@@ -121,7 +123,8 @@ func ReadScenariosFromCSV(filepath string) ([]BatchScenario, error) {
 			Client:   getCSVField(record, colMap, "client"),
 			Country:  getCSVField(record, colMap, "country"),
 			IP:       getCSVField(record, colMap, "ip"),
-			Policy:   getCSVField(record, colMap, "policy"), // Optional
+			UserRisk: getCSVField(record, colMap, "user_risk"), // Optional
+			Policy:   getCSVField(record, colMap, "policy"),    // Optional
 		}
 
 		if strings.TrimSpace(scenario.User) == "" || strings.TrimSpace(scenario.App) == "" {
@@ -146,7 +149,7 @@ func WriteResultsToCSV(filepath string, results []ScenarioResult) error {
 
 	// Header
 	header := []string{
-		"scenario_id", "user", "app", "platform", "client", "country", "ip",
+		"scenario_id", "user", "app", "platform", "client", "country", "ip", "user_risk",
 		"final_effect", "applied_policies_count", "not_applied_policies_count",
 		"grant_controls", "error",
 	}
@@ -166,6 +169,7 @@ func WriteResultsToCSV(filepath string, results []ScenarioResult) error {
 			r.Client,
 			r.Country,
 			r.IP,
+			r.UserRisk,
 			r.FinalEffect,
 			fmt.Sprintf("%d", len(r.AppliedPolicies)),
 			fmt.Sprintf("%d", len(r.NotAppliedPolicies)),

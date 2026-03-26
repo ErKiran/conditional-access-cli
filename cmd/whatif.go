@@ -42,6 +42,7 @@ var whatIfCmd = &cobra.Command{
 		client, _ := cmd.Flags().GetString("client")
 		ip, _ := cmd.Flags().GetString("ip")
 		country, _ := cmd.Flags().GetString("country")
+		userRisk, _ := cmd.Flags().GetString("user-risk")
 		policyFilter, _ := cmd.Flags().GetString("policy")
 
 		if strings.TrimSpace(user) == "" || strings.TrimSpace(app) == "" {
@@ -59,7 +60,7 @@ var whatIfCmd = &cobra.Command{
 		}
 
 		input := graph.WhatIfInput{
-			User: userID, App: app, Platform: platform, Client: client, IP: ip, Country: country,
+			User: userID, App: app, Platform: platform, Client: client, IP: ip, Country: country, UserRisk: userRisk,
 		}
 
 		resp, err := gh.WhatIfEvaluateOfficial(input)
@@ -314,6 +315,7 @@ func init() {
 	whatIfCmd.Flags().String("client", "", "Client app type (browser, mobileAppsAndDesktopClients, etc.)")
 	whatIfCmd.Flags().String("ip", "", "IP address")
 	whatIfCmd.Flags().String("country", "", "Country code (e.g., US)")
+	whatIfCmd.Flags().String("user-risk", "", "User risk level (none, low, medium, high, hidden)")
 	whatIfCmd.Flags().String("policy", "", "Filter to specific policy by name or ID (e.g., 'Require MFA' or policy-guid)")
 	whatIfCmd.Flags().Bool("raw", false, "Print raw official Graph response JSON")
 	whatIfCmd.Flags().Bool("local", false, "Force local evaluator (skip official Graph What-If API)")
